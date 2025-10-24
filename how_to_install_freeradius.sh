@@ -1,29 +1,31 @@
 #!/bin/bash
 # ============================================================
 # 🛠️ Projeto: Hotspot Surfix - Instalação Automática
-# 📅 Versão: 1.0
-# 🧑 Autor: Seu Nome ou Empresa
-# 📧 Contato: seuemail@dominio.com
+# 📅 Versão: 1.1
+# 🧑 Autor: alexrod3
+# 📧 Contato: github.com/alexrod3
 # 🐧 Compatível com: Ubuntu Server 24.04 LTS
 # 📦 Serviços instalados:
 #   - FreeRADIUS (Autenticação)
 #   - CoovaChilli (Captive Portal)
 #   - MariaDB (Banco de dados)
 #   - Apache2 + PHP (Servidor Web)
-#   - Utilitários: whois, net-tools, git
+#   - Utilitários: whois, net-tools, git, unzip
 # ============================================================
 
-echo "🔧 Atualizando sistema..."
-sudo apt update && sudo apt upgrade -y
+echo "🧹 Removendo pacotes antigos para evitar conflitos..."
+sudo apt purge -y freeradius* mariadb* apache2* coovachilli* php* net-tools whois unzip git
+sudo apt autoremove -y
+sudo apt update
 
 echo "📦 Instalando pacotes essenciais..."
 sudo apt install -y freeradius freeradius-utils freeradius-mysql mariadb-server apache2 php php-mysql coovachilli net-tools whois unzip git
 
 echo "🚀 Iniciando e habilitando serviços..."
 sudo systemctl enable --now freeradius
-sudo systemctl enable --now mysql
+sudo systemctl enable --now mariadb
 sudo systemctl enable --now apache2
-sudo systemctl enable --now chilli
+sudo systemctl enable --now coovachilli
 
 echo "🔍 Detectando interfaces de rede..."
 WAN_IFACE=$(ip route get 1.1.1.1 | awk '{print $5; exit}')
@@ -66,8 +68,9 @@ EOF
 
 echo "🔄 Reiniciando serviços..."
 sudo systemctl restart freeradius
-sudo systemctl restart chilli
+sudo systemctl restart mariadb
 sudo systemctl restart apache2
+sudo systemctl restart coovachilli
 
 echo "📡 Detectando IP local..."
 IP_LOCAL=$(ip route get 1.1.1.1 | awk '{print $7; exit}')
