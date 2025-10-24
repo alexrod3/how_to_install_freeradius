@@ -1,15 +1,14 @@
 #!/bin/bash
 # ============================================================
-# 🛠️ Instalação Oficial do CoovaChilli + FreeRADIUS + Apache
-# 📅 Compatível com: Ubuntu Server 24.04 LTS
+# 🛠️ Instalação do CoovaChilli + FreeRADIUS + Apache
+# 📦 Compatível com: Ubuntu Server 24.04 LTS
+# 🔄 Portátil: IP e interfaces detectados automaticamente
 # ============================================================
 
 set -e
 
-# Funções de mensagens
 info()  { echo -e "\033[1;34m[INFO]\033[0m $1"; }
 ok()    { echo -e "\033[1;32m[OK]\033[0m $1"; }
-error() { echo -e "\033[1;31m[ERRO]\033[0m $1"; exit 1; }
 
 info "🔄 Removendo instalações anteriores..."
 sudo systemctl stop coovachilli || true
@@ -34,8 +33,6 @@ info "🐙 Clonando CoovaChilli..."
 cd /usr/src
 sudo git clone https://github.com/coova/coova-chilli.git
 cd coova-chilli
-
-info "🔧 Compilando CoovaChilli..."
 sudo autoreconf -fi
 sudo ./configure --prefix=/usr --sysconfdir=/etc
 sudo make clean
@@ -69,28 +66,37 @@ IP_LOCAL=$(ip route get 1.1.1.1 | awk '{print $7; exit}')
 info "🌐 Interface WAN: $WAN_IFACE"
 info "📍 IP local detectado: $IP_LOCAL"
 
-info "🧪 Criando interface LAN virtual..."
-sudo ip link add name lan0 type dummy
-sudo ip link set lan0 up
-LAN_IFACE=lan0
+info "🔍 Procurando interface LAN..."
+LAN_IFACE=$(ip link | grep -E 'wlan|wl|ap|br' | awk -F: '{print $2}' | head -n1 | xargs)
+
+if [ -z "$LAN_IFACE" ]; then
+  info "Nenhuma interface LAN detectada. Criando lan0 virtual..."
+  LAN_IFACE="lan0"
+  sudo ip link add name $LAN_IFACE type dummy || true
+  sudo ip link set $LAN_IFACE up
+fi
+
+info "Atribuindo IP à interface LAN: $LAN_IFACE"
+sudo ip addr flush dev $LAN_IFACE || true
+sudo ip addr add 192.168.182.1/24 dev $LAN_IFACE
 
 info "📁 Criando configuração do CoovaChilli..."
 sudo mkdir -p /etc/chilli
 sudo tee /etc/chilli/config > /dev/null <<EOF
 HS_WANIF=$WAN_IFACE
 HS_LANIF=$LAN_IFACE
-HS_NETWORK=10.10.10.0
+HS_NETWORK=192.168.182.0
 HS_NETMASK=255.255.255.0
-HS_UAMLISTEN=$IP_LOCAL
+HS_UAMLISTEN=192.168.182.1
 HS_UAMPORT=3990
-HS_UAMUIP=$IP_LOCAL
-HS_UAMSERVER=$IP_LOCAL
+HS_UAMUIP=192.168.182.1
+HS_UAMSERVER=192.168.182.1
 HS_UAMSECRET=secret
-HS_RADIUS=127.0.0.1
-HS_RADIUS2=127.0.0.1
+HS_RADIUS=$IP_LOCAL
+HS_RADIUS2=$IP_LOCAL
 HS_RADSECRET=testing123
 HS_NASID=nas01
-HS_NASIP=$IP_LOCAL
+HS_NASIP=192.168.182.1
 HS_LOC_NAME="Hotspot Surfix"
 HS_LOC_ID=surfix01
 HS_ADMIN_EMAIL=admin@localhost
@@ -118,5 +124,5 @@ sudo systemctl restart apache2
 sudo systemctl restart coovachilli
 
 ok "🎉 Instalação concluída com sucesso!"
-echo "➡️ Acesse o portal captive em: http://$IP_LOCAL:3990"
-echo "➡️ Teste RADIUS com: radtest testuser testpass localhost 0 testing123"
+echo "➡️ Portal captive: http://192.168.182.1:3990"
+echo "➡️ Teste RADIUS: radtest testuser testpass $IP_LOCAL 0 testing123"
