@@ -78,4 +78,77 @@ sudo systemctl enable --now coovachilli || warn "Falha ao iniciar coovachilli (v
 
 # --- Iniciando serviços principais ---
 for svc in freeradius mariadb apache2 coovachilli; do
-  if systemctl list-unit-files | g
+  if systemctl list-unit-files | grep -q "${svc}.service"; then
+    info "Iniciando serviço: $svc"
+    sudo systemctl enable --now "$svc"
+  else
+    warn "Serviço não encontrado: $svc"
+  fi
+done
+
+# --- Configuração de rede ---
+info "Detectando interfaces de rede..."
+WAN_IFACE=$(ip route get 1.1.1.1 | awk '{print $5; exit}')
+LAN_IFACE=$(ip link | grep -E 'wlan|wl|ap' | awk -F: '{print $2}' | head -n1 | xargs)
+
+info "WAN: $WAN_IFACE | LAN: $LAN_IFACE"
+
+# --- Banco de dados ---
+info "Configurando MariaDB..."
+sudo mysql -e "CREATE DATABASE IF NOT EXISTS radius;"
+sudo mysql -e "CREATE USER IF NOT EXISTS 'radius'@'localhost' IDENTIFIED BY 'radius';"
+sudo mysql -e "GRANT ALL PRIVILEGES ON radius.* TO 'radius'@'localhost';"
+sudo mysql -e "FLUSH PRIVILEGES;"
+
+# --- Usuário de teste RADIUS ---
+info "Adicionando usuário de teste ao FreeRADIUS..."
+USER_CONF="/etc/freeradius/3.0/mods-config/files/authorize"
+sudo cp $USER_CONF ${USER_CONF}.bak
+echo -e "\nradius Cleartext-Password := \"radius\"" | sudo tee -a $USER_CONF > /dev/null
+
+# --- Configuração CoovaChilli ---
+info "Configurando CoovaChilli..."
+sudo mkdir -p /etc/chilli
+sudo tee /etc/chilli/config > /dev/null <<EOF
+HS_WANIF=$WAN_IFACE
+HS_LANIF=$LAN_IFACE
+HS_NETWORK=192.168.182.0
+HS_NETMASK=255.255.255.0
+HS_UAMLISTEN=192.168.182.1
+HS_UAMPORT=3990
+HS_UAMUIP=192.168.182.1
+HS_UAMSERVER=192.168.182.1
+HS_UAMSECRET=secret
+HS_RADIUS=127.0.0.1
+HS_RADIUS2=127.0.0.1
+HS_RADSECRET=testing123
+HS_NASID=nas01
+HS_NASIP=192.168.182.1
+HS_LOC_NAME="Hotspot Surfix"
+HS_LOC_ID=surfix01
+HS_ADMIN_EMAIL=admin@localhost
+EOF
+
+# --- Reiniciando tudo ---
+info "Reiniciando serviços..."
+sudo systemctl restart freeradius mariadb apache2 coovachilli
+
+# --- Teste final ---
+IP_LOCAL=$(ip route get 1.1.1.1 | awk '{print $7; exit}')
+ok "Servidor ativo no IP: $IP_LOCAL"
+
+info "Testando autenticação com radtest..."
+radtest radius radius localhost 0 testing123 || warn "Falha ao testar autenticação RADIUS."
+
+echo -e "\n🎉 \033[1;32mInstalação concluída com sucesso!\033[0m"
+echo "---------------------------------------------"
+echo "➡️ IP do servidor: $IP_LOCAL"
+echo "➡️ Porta RADIUS: 1812"
+echo "➡️ Usuário RADIUS: radius"
+echo "➡️ Senha RADIUS: radius"
+echo "➡️ Shared Secret: testing123"
+echo "➡️ MySQL User: radius"
+echo "➡️ MySQL Password: radius"
+echo "➡️ Banco de dados: radius"
+echo "➡️ Portal de cadastro: http://$IP_LOCAL"
+echo "---------------------------------------------"
