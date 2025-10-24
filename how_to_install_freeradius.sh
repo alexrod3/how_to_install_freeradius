@@ -1,16 +1,10 @@
 #!/bin/bash
 # ============================================================
 # 🛠️ Projeto: Hotspot Surfix - Instalação Automática
-# 📅 Versão: 1.2
+# 📅 Versão: 1.3
 # 🧑 Autor: alexrod3
 # 📧 Contato: github.com/alexrod3
 # 🐧 Compatível com: Ubuntu Server 24.04 LTS
-# 📦 Serviços instalados:
-#   - FreeRADIUS (Autenticação)
-#   - CoovaChilli (Captive Portal)
-#   - MariaDB (Banco de dados)
-#   - Apache2 + PHP (Servidor Web)
-#   - Utilitários: whois, net-tools, git, unzip
 # ============================================================
 
 echo "🔍 Verificando versão do Ubuntu..."
@@ -21,25 +15,48 @@ if [[ "$OS_VERSION" != "24.04" ]]; then
 fi
 
 echo "🧼 Removendo pacotes antigos para evitar conflitos..."
-for pkg in freeradius mariadb-server apache2 coovachilli php net-tools whois unzip git; do
-  if dpkg -l | grep -q "$pkg"; then
-    echo "⚠️ Removendo pacote existente: $pkg"
-    sudo apt purge -y "$pkg"
-  fi
-done
+sudo apt purge -y freeradius* mariadb* apache2* php* net-tools whois unzip git
 sudo apt autoremove -y
 sudo apt update
 
 echo "📦 Instalando pacotes essenciais..."
-sudo apt install -y freeradius freeradius-utils freeradius-mysql mariadb-server apache2 php php-mysql coovachilli net-tools whois unzip git
+sudo apt install -y build-essential libssl-dev libcurl4-openssl-dev libnl-3-dev libnl-genl-3-dev pkg-config git autoconf automake libtool \
+freeradius freeradius-utils freeradius-mysql mariadb-server apache2 php php-mysql net-tools whois unzip
 
-echo "✅ Verificando e ativando serviços..."
+echo "🐙 Instalando CoovaChilli v1.7 manualmente..."
+cd /usr/src
+sudo git clone https://github.com/coova/coova-chilli.git
+cd coova-chilli
+sudo autoreconf -fi
+sudo ./configure --prefix=/usr --sysconfdir=/etc
+sudo make
+sudo make install
+
+echo "🔧 Criando serviço systemd para CoovaChilli..."
+sudo tee /etc/systemd/system/coovachilli.service > /dev/null <<EOF
+[Unit]
+Description=CoovaChilli Captive Portal
+After=network.target
+
+[Service]
+ExecStart=/usr/sbin/chilli -c /etc/chilli/config
+ExecReload=/bin/kill -HUP \$MAINPID
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now coovachilli
+
+echo "✅ Ativando serviços principais..."
 for svc in freeradius mariadb apache2 coovachilli; do
   if systemctl list-unit-files | grep -q "${svc}.service"; then
-    echo "🔧 Habilitando e iniciando serviço: $svc"
+    echo "🔧 Iniciando serviço: $svc"
     sudo systemctl enable --now "$svc"
   else
-    echo "❌ Serviço não encontrado: $svc. Verifique se o pacote foi instalado corretamente."
+    echo "❌ Serviço não encontrado: $svc"
     exit 1
   fi
 done
@@ -48,8 +65,8 @@ echo "🔍 Detectando interfaces de rede..."
 WAN_IFACE=$(ip route get 1.1.1.1 | awk '{print $5; exit}')
 LAN_IFACE=$(ip link | grep -E 'wlan|wl|ap' | awk -F: '{print $2}' | head -n1 | xargs)
 
-echo "🌐 Interface WAN detectada: $WAN_IFACE"
-echo "📡 Interface LAN detectada: $LAN_IFACE"
+echo "🌐 Interface WAN: $WAN_IFACE"
+echo "📡 Interface LAN: $LAN_IFACE"
 
 echo "🔐 Configurando banco de dados MariaDB..."
 sudo mysql -e "CREATE DATABASE radius;"
@@ -62,7 +79,8 @@ USER_CONF="/etc/freeradius/3.0/mods-config/files/authorize"
 sudo cp $USER_CONF ${USER_CONF}.bak
 echo -e "\nradius Cleartext-Password := \"radius\"" | sudo tee -a $USER_CONF
 
-echo "🔧 Configurando CoovaChilli com interfaces detectadas..."
+echo "🔧 Configurando CoovaChilli..."
+sudo mkdir -p /etc/chilli
 sudo tee /etc/chilli/config > /dev/null <<EOF
 HS_WANIF=$WAN_IFACE
 HS_LANIF=$LAN_IFACE
