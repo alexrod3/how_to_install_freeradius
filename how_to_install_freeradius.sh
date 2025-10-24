@@ -1,7 +1,7 @@
 #!/bin/bash
 # ============================================================
 # 🛠️ Projeto: Hotspot Surfix - Instalação Automática
-# 📅 Versão: 1.1
+# 📅 Versão: 1.2
 # 🧑 Autor: alexrod3
 # 📧 Contato: github.com/alexrod3
 # 🐧 Compatível com: Ubuntu Server 24.04 LTS
@@ -13,19 +13,36 @@
 #   - Utilitários: whois, net-tools, git, unzip
 # ============================================================
 
-echo "🧹 Removendo pacotes antigos para evitar conflitos..."
-sudo apt purge -y freeradius* mariadb* apache2* coovachilli* php* net-tools whois unzip git
+echo "🔍 Verificando versão do Ubuntu..."
+OS_VERSION=$(lsb_release -rs)
+if [[ "$OS_VERSION" != "24.04" ]]; then
+  echo "❌ Este script foi projetado para Ubuntu 24.04. Você está usando: $OS_VERSION"
+  exit 1
+fi
+
+echo "🧼 Removendo pacotes antigos para evitar conflitos..."
+for pkg in freeradius mariadb-server apache2 coovachilli php net-tools whois unzip git; do
+  if dpkg -l | grep -q "$pkg"; then
+    echo "⚠️ Removendo pacote existente: $pkg"
+    sudo apt purge -y "$pkg"
+  fi
+done
 sudo apt autoremove -y
 sudo apt update
 
 echo "📦 Instalando pacotes essenciais..."
 sudo apt install -y freeradius freeradius-utils freeradius-mysql mariadb-server apache2 php php-mysql coovachilli net-tools whois unzip git
 
-echo "🚀 Iniciando e habilitando serviços..."
-sudo systemctl enable --now freeradius
-sudo systemctl enable --now mariadb
-sudo systemctl enable --now apache2
-sudo systemctl enable --now coovachilli
+echo "✅ Verificando e ativando serviços..."
+for svc in freeradius mariadb apache2 coovachilli; do
+  if systemctl list-unit-files | grep -q "${svc}.service"; then
+    echo "🔧 Habilitando e iniciando serviço: $svc"
+    sudo systemctl enable --now "$svc"
+  else
+    echo "❌ Serviço não encontrado: $svc. Verifique se o pacote foi instalado corretamente."
+    exit 1
+  fi
+done
 
 echo "🔍 Detectando interfaces de rede..."
 WAN_IFACE=$(ip route get 1.1.1.1 | awk '{print $5; exit}')
