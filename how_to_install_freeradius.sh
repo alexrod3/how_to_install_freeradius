@@ -16,7 +16,7 @@ sudo systemctl stop coovachilli || true
 sudo systemctl disable coovachilli || true
 sudo rm -f /etc/systemd/system/coovachilli.service
 sudo rm -rf /etc/chilli /usr/src/coova-chilli /usr/sbin/chilli
-sudo apt purge -y freeradius* mariadb* apache2* php* coova-chilli net-tools whois unzip git
+sudo apt purge -y freeradius* mariadb* apache2* php* net-tools whois unzip git
 sudo apt autoremove -y
 sudo ufw reset
 sudo ufw --force enable
@@ -64,7 +64,7 @@ info "🌐 Ativando IP forwarding..."
 sudo sed -i 's/#net.ipv4.ip_forward=1/net.ipv4.ip_forward=1/' /etc/sysctl.conf
 sudo sysctl -p
 
-info "📡 Detectando interfaces..."
+info "📡 Detectando interfaces e IP local..."
 WAN_IFACE=$(ip route get 1.1.1.1 | awk '{print $5; exit}')
 LAN_IFACE=$(ip link | grep -E 'wlan|wl|ap' | awk -F: '{print $2}' | head -n1 | xargs)
 IP_LOCAL=$(ip route get 1.1.1.1 | awk '{print $7; exit}')
