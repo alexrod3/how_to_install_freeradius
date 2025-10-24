@@ -1,8 +1,8 @@
 #!/bin/bash
 # ============================================================
 # 🛠️ Projeto: Hotspot Surfix - Instalação Automática
-# 📅 Versão: 1.3
-# 🧑 Autor: alexrod3
+# 📅 Versão: 1.4 (corrigida)
+# 🧑 Autor: alexrod3 (modificado para corrigir ExecStart)
 # 📧 Contato: github.com/alexrod3
 # 🐧 Compatível com: Ubuntu Server 24.04 LTS
 # ============================================================
@@ -25,12 +25,23 @@ freeradius freeradius-utils freeradius-mysql mariadb-server apache2 php php-mysq
 
 echo "🐙 Instalando CoovaChilli v1.7 manualmente..."
 cd /usr/src
+sudo rm -rf coova-chilli
 sudo git clone https://github.com/coova/coova-chilli.git
 cd coova-chilli
 sudo autoreconf -fi
 sudo ./configure --prefix=/usr --sysconfdir=/etc
 sudo make
 sudo make install
+
+# ✅ Correção: garantir que o binário esteja disponível em /usr/sbin
+if [[ -f /usr/src/coova-chilli/src/chilli ]]; then
+  echo "📁 Copiando binário chilli para /usr/sbin..."
+  sudo cp /usr/src/coova-chilli/src/chilli /usr/sbin/chilli
+  sudo chmod +x /usr/sbin/chilli
+else
+  echo "❌ Erro: binário chilli não encontrado após compilação!"
+  exit 1
+fi
 
 echo "🔧 Criando serviço systemd para CoovaChilli..."
 sudo tee /etc/systemd/system/coovachilli.service > /dev/null <<EOF
