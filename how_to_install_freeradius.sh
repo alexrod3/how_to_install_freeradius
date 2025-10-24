@@ -58,20 +58,21 @@ WantedBy=multi-user.target
 EOF
 
 sudo systemctl daemon-reload
-sudo systemctl enable --now coovachilli
 
 info "🌐 Ativando IP forwarding..."
 sudo sed -i 's/#net.ipv4.ip_forward=1/net.ipv4.ip_forward=1/' /etc/sysctl.conf
 sudo sysctl -p
 
-info "📡 Detectando interfaces e IP local..."
+info "📡 Detectando interface WAN e IP local..."
 WAN_IFACE=$(ip route get 1.1.1.1 | awk '{print $5; exit}')
-LAN_IFACE=$(ip link | grep -E 'wlan|wl|ap' | awk -F: '{print $2}' | head -n1 | xargs)
 IP_LOCAL=$(ip route get 1.1.1.1 | awk '{print $7; exit}')
-
 info "🌐 Interface WAN: $WAN_IFACE"
-info "📡 Interface LAN: $LAN_IFACE"
 info "📍 IP local detectado: $IP_LOCAL"
+
+info "🧪 Criando interface LAN virtual..."
+sudo ip link add name lan0 type dummy
+sudo ip link set lan0 up
+LAN_IFACE=lan0
 
 info "📁 Criando configuração do CoovaChilli..."
 sudo mkdir -p /etc/chilli
@@ -90,8 +91,8 @@ HS_RADIUS2=127.0.0.1
 HS_RADSECRET=testing123
 HS_NASID=nas01
 HS_NASIP=$IP_LOCAL
-HS_LOC_NAME="Hotspot Oficial"
-HS_LOC_ID=hotspot01
+HS_LOC_NAME="Hotspot Surfix"
+HS_LOC_ID=surfix01
 HS_ADMIN_EMAIL=admin@localhost
 EOF
 
